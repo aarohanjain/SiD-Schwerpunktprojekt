@@ -1,5 +1,5 @@
 # SiD-Schwerpunktprojekt
-# Simulation of a Virtual Swarm of Kinematically Coupled Drones
+## Simulation of a Virtual Swarm of Kinematically Coupled Drones
 
 Das zuerst auszufuehrende MATLAB-Skript SiD_Skript.m ist im folgenden Ordner:
 SID/Demos/SID/simulink/SiD_Skript.m
