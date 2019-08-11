@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en,de">
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8"/>
+    <title>SiD – Simulation of a Virtual Swarm of Kinematically Coupled Drones </title>
+    <link href="lib/3rdparty/ui.css" rel="stylesheet">
+    <link href="lib/style.css" rel="stylesheet">
+    <style>
+        #info {
+            width: 25%;
+            height: 60%;
+            border:2px solid black;
+            background-color:silver;
+        }
+
+        #renderCanvas {
+            width: 75%;
+            height: 100%;
+            touch-action: none;
+            border:0.5px solid black;
+        }
+
+        #sidebar {
+            width: 25%;
+            height: 40%;
+            float: right;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+
+    
+<div id="overlay" style="position: absolute; right: 40%; bottom: 0; z-index: 10000; margin: 1em;"></div>
+<canvas id="renderCanvas"></canvas>
+
+<div id="sidebar" class="container">
+    <p style="font-size: 175%;"><b>Flughöhe in m</b></p>
+    <div style="position: absolute; right: 1em; bottom: 1em"></div>
+    
+</div>
+
+<div id="info" class="container" style="position: absolute; left:75%;top: 40%;">
+    <p style="font-size:175%;"><b>Kamerasteuerung</b></p>
+    <ul>
+        <li style="font-size:120%;"><b>Umsehen</b>: linke Maustaste gedrückt halten und Maus in die gewünschte Richtung bewegen</li>
+        <li style="font-size:120%;"><b>Kameraposition</b>: Pfeiltasten</li>
+        <div style="position: absolute;"></div>
+    </ul>
+        <p></p>
+        <p style="font-size:175%;"><b>Bedeutung der Kugeln</b></p>
+        <ul>
+                <li style="font-size:120%;"><b>rote & blaue Kugel</b>: Magnete für die Kopplung</li>
+                <li style="font-size:120%;"><b>transparente Kugel</b>: Imaginäre Kugel für die Berechnung der Kräfte</li>
+                <div style="position: absolute;"></div>
+        </ul>
+
+        <p></p>
+        <p style="font-size:175%;"><b>Fehlerbehebung</b></p>
+        <ul>
+                <li style="font-size:120%;">Falls eine Drohne ohne Grund nicht dargestellt wird, kann es durch einen Neustart des Webapps behoben werden.</li>
+                <div style="position: absolute;"></div>
+        </ul>
+
+</div>
+
+<script type="text/x-mathjax-config">
+// based on TeX-AMS_CHTML and https://ro-che.info/articles/2017-04-02-deploying-mathjax
+MathJax.Hub.Config({
+  jax: ["input/TeX","output/CommonHTML"],
+  extensions: ["tex2jax.js","MathMenu.js","MathZoom.js", "AssistiveMML.js"],
+  TeX: {
+    extensions: ["AMSmath.js","AMSsymbols.js","noErrors.js","noUndefined.js"]
+  },
+  "HTML-CSS": {
+    availableFonts: ["TeX"],
+    imageFont: null
+  },
+  MathMenu: {
+    showRenderer: false,
+    showFontMenu: false,
+    showLocale: false
+  },
+  menuSettings: {zoom: "Double-Click"}
+});
+</script>
+
+<script src="lib/3rdparty/base.js"></script>
+<script src="lib/3rdparty/babylon-extra/oimo.js"></script>
+<script src="lib/3rdparty/babylon.js"></script>
+<script src="lib/3rdparty/ui.js"></script>
+<script type="text/javascript" src="lib/3rdparty/MathJax/MathJax.js"></script>
+<script src="lib/3rdparty/ui-extra/Chart.min.js"></script>
+
+<script src="lib/common.js"></script>
+<script src="lib/datasource.js"></script>
+<script src="lib/babylon.js"></script>
+<script src="lib/quaternion.js"></script>
+<script src="lib/ui.js"></script>
+<script src="lib/ui-extra.js"></script>
+<script src="lib/quadcop.js"></script>
+
+<script src="src/equationeditor.js"></script>
+<script src="src/rootlocusplot.js"></script>
+
+<script>
+    "use strict";
+
+    tr.db.de = {
+        "Language": "Sprache",
+
+        "Pole-zero cancellation!": "Pol-Nullstellen-Kürzung!",
+    };
+
+    class MyQuadcopScene extends QuadcopScene {
+        constructor(id) {
+            super(id, {droneColor: COLORS.C0, droneColor: COLORS.C0, droneRefColor: COLORS.C1,});
+            this.setupCameraAnimation();
+        }
+
+      
+        createBuildings() {
+            return [
+                new Skyscraper(this.scene, this.options, 5, 0, 0.7, 0.7, 2),
+
+                new Skyscraper(this.scene, this.options, 5, 5, 0.7, 0.7, 1),
+
+                new Skyscraper(this.scene, this.options, 2, 5, 0.5, 0.5, 0.8),
+                new Skyscraper(this.scene, this.options, 2, 5, 0.4, 0.4, 1),
+                new Skyscraper(this.scene, this.options, 2, 5, 0.3, 0.3, 1.2),
+                new Skyscraper(this.scene, this.options, 2, 5, 0.2, 0.2, 1.4),
+                new Skyscraper(this.scene, this.options, 2, 5, 0.1, 0.1, 1.5),
+
+                new Skyscraper(this.scene, this.options, -2, -5, 0.5, 0.5, 0.8),
+                new Skyscraper(this.scene, this.options, -2, -5, 0.4, 0.4, 1),
+                new Skyscraper(this.scene, this.options, -2, -5, 0.3, 0.3, 1.2),
+                new Skyscraper(this.scene, this.options, -2, -5, 0.2, 0.2, 1.4),
+                new Skyscraper(this.scene, this.options, -2, -5, 0.1, 0.1, 1.5),
+
+                new Skyscraper(this.scene, this.options, 5, -5, 0.7, 0.7, 1),
+
+                new Skyscraper(this.scene, this.options, 2, -5, 0.7, 0.7, 1),
+                new Skyscraper(this.scene, this.options, 2, -5, 0.4, 0.7, 2),
+                new Skyscraper(this.scene, this.options, 2, -5, 0.2, 0.7, 2.5),
+
+                new Skyscraper(this.scene, this.options, -5, -5, 0.7, 0.7, 1),
+
+                new Skyscraper(this.scene, this.options, -5, 5, 0.7, 0.7, 1),
+
+                new Skyscraper(this.scene, this.options, -5, 0, 0.3, 2.7, 0.5),
+
+                new Skyscraper(this.scene, this.options, -2, 5, 0.7, 0.7, 1),
+                new Skyscraper(this.scene, this.options, -2, 5, 0.4, 0.7, 2),
+                new Skyscraper(this.scene, this.options, -2, 5, 0.2, 0.7, 2.5),
+     ];
+          
+        }
+
+        setupCameraAnimation() {
+            this.N = 45;
+            this.alphaAnimation = new BABYLON.Animation("camAlpha", "alpha", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+            this.betaAnimation = new BABYLON.Animation("camBeta", "beta", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+            this.radiusAnimation = new BABYLON.Animation("camRadius", "radius", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+
+            this.alphaKeys = [
+                {frame: 0, value: 3.15},  // heading, hover mode
+                {frame: this.N, value: -0.3}, // heading, taxi mode
+            ];
+            this.betaKeys = [
+                {frame: 0, value: 1.3}, // inclination, hover mode (0 is vertical)
+                {frame: Math.floor(this.N/2), value: 0.8}, // a bit up
+                {frame: this.N, value: 1.3}, // inclination, taxi mode
+            ];
+            this.radiusKeys = [
+                {frame: 0, value: 110}, // distance from center, hover mode
+                {frame: this.N, value: 130}, // distance from center, taxi mode
+            ];
+
+            this.alphaKeysReversed = this.alphaKeys.slice().reverse().map(obj => ({frame: this.N - obj.frame, value: obj.value}));
+            this.betaKeysReversed = this.betaKeys.slice().reverse().map(obj => ({frame: this.N - obj.frame, value: obj.value}));
+            this.radiusKeysReversed = this.radiusKeys.slice().reverse().map(obj => ({frame: this.N - obj.frame, value: obj.value}));
+
+            this.camera.alpha = this.alphaKeys[0].value;
+            this.camera.beta = this.betaKeys[0].value;
+            this.camera.radius = this.radiusKeys[0].value;
+
+            const easingFunction = new BABYLON.QuadraticEase();
+            easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+            this.alphaAnimation.setEasingFunction(easingFunction);
+            this.betaAnimation.setEasingFunction(easingFunction);
+            this.radiusAnimation.setEasingFunction(easingFunction);
+
+            this.camera.animations.push(this.alphaAnimation);
+            this.camera.animations.push(this.betaAnimation);
+            this.camera.animations.push(this.radiusAnimation);
+        }
+    }
+
+    const dataSource = new WebSocketDataSource("ws://localhost:30000/ws", {});
+
+    const mainScene = new MyQuadcopScene('renderCanvas');
+    dataSource.addSink(mainScene);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // MODIFY SAMPLE (e.g. add new signal or modify incoming data)
+    // NOTE THAT THE CODE THAT MOVES THE DRONE ALSO GETS THE MODIFIED DATA!
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    let lastResetVal = undefined;
+    let resetLineVal = 100;
+    let resetConstCount = 0;
+    dataSource.processSample = function(sample) {
+        sample['zero'] = 0.0;
+        if (mainScene.drone.crashed) {
+            const dronePos = mainScene.drone.obj.position;
+            sample['realpos'] = [-dronePos.z/mainScene.options.scale, -dronePos.x/mainScene.options.scale, (dronePos.y-mainScene.options.offsetZ)/mainScene.options.scale];
+        } else {
+            sample['realpos'] = sample['pos'];
+        }
+        sample['crashed'] = 2*mainScene.drone.crashed - 1;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+        // calculate value for vertical reset line
+        // the reset signal changes twice per reset with 5 samples (0.2 s) of a constant signal in between.
+        // we want to
+        if (sample.reset !== lastResetVal) {
+            lastResetVal = sample.reset;
+            if (resetConstCount < 25)
+                resetLineVal *= -1;
+            resetConstCount = 0;
+        } else {
+            resetConstCount++;
+        }
+        sample.resetline = resetLineVal;
+        console.log(sample.reset);
+
+
+        return sample;
+    };
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // CREATE/SETUP PLOTS
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    const posZPlot = new LinePlot('#sidebar', ['realpos.2'],
+        {
+            width: 350,
+            height: 200,
+            labels: ['z', ''],
+            colors: ['#1f77b4'],
+            ylim: [0, 2],
+            clip: false,
+            xlabel:("t in s"),
+            ylabel:("h in m"),
+
+        });
+    dataSource.addSink(posZPlot);
+
+   // const modeDropdown = new Dropdown('#overlay', [tr('Hover Mode'), tr('Taxi Mode')]);
+
+   /*
+   const modeDropdown = new Dropdown('#overlay', [tr('Hover Mode')]);
+    dataSource.addParameter(modeDropdown, 'mode');
+    modeDropdown.on('change', value => mainScene.animateCamera(value));
+*/
+ //   const advancedPanel = new Panel('#sidebar', tr('Language'), {collapsed: true});
+  //  const languageSelector = new LanguageSelector(advancedPanel);
+
+</script>
+
+</body>
+</html>

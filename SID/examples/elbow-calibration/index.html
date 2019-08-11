@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html" charset="utf-8"/>
+    <title>Ellbogen-Kalibrierung</title>
+    <link href="lib/3rdparty/ui.css" rel="stylesheet">
+    <link href="lib/style.css" rel="stylesheet">
+</head>
+
+<!--
+IMPORTANT NOTE:
+How the user interface is built here is NOT a good example. Instead of defining the HTML code statically, the
+Widget classes from ui.js should be used!
+-->
+
+<body>
+
+<canvas id="renderCanvas"></canvas>
+
+<div id="sidebar" class="container">
+    <h3>Ellbogen-Kalibrierung</h3>
+
+    <h4>Sensor-Orientierungen:</h4>
+
+    <div><canvas style="width: 190px; height: 140px" id="renderCanvasIMU1"></canvas>
+    <canvas style="width: 190px; height: 140px" id="renderCanvasIMU2"></canvas></div>
+
+    <!--<br>-->
+
+    <h4>Kalibrierung:</h4>
+
+    <!--<div class="btn-group-vertical btn-block">-->
+    <button id="startButton" type="button" class="btn btn-lg btn-primary btn-block" data-running-text="Kalibrierung läuft" data-success-text="Kalibriert">Unkalibriert</button>
+
+    <button id="useFixedAlignmentButton" type="button" class="btn btn-primary btn-block">Bekannte Anbringung annehmen</button>
+    <button id="resetCalibrationButton" type="button" class="btn btn-primary btn-block">Kalibrierung zurücksetzen</button>
+    <!--</div>-->
+
+    <div class="checkbox"><label><input id="enableAvatarCheckbox" type="checkbox" value="" checked>Armbewegung anzeigen</label></div>
+
+    <!--<br>-->
+    <h4>Magnetfeld-Störung:</h4>
+
+    <!--<p style="text-align: center"><canvas id="deltaPlot" width="300" height="150"></canvas></p>-->
+    <div id="deltaPlotDiv"></div>
+    <p style="text-align: center"><span class="badge" style="background-color: #1f77b4">&nbsp;</span> simuliert &nbsp;
+        <span class="badge" style="background-color: #2ca02c">&nbsp;</span> geschätzt</p>
+
+    <!--<button id="toggleDisturbanceButton" type="button" class="btn btn-primary btn-block" data-active-text="Störung wird simuliert!">Störung simulieren</button>-->
+    <div class="checkbox"><label><input id="identifyDistCheckbox" type="checkbox" value="">Magnetfeld-Störung identifizieren</label></div>
+    <div class="checkbox"><label><input id="disturbanceCheckbox" type="checkbox" value="">Magnetfeld-Störung simulieren</label></div>
+    <div class="checkbox"><label><input id="compensateDistCheckbox" type="checkbox" value="">Magnetfeld-Störung kompensieren</label></div>
+
+    <button type="button" class="btn btn-primary btn-block" data-toggle="modal" data-target="#magDistDialog">Magnetfeld-Test</button>
+
+    <!--<h4>Anzeige:</h4>-->
+    <!--<button id="resetHeadingThumbButton" type="button" class="btn btn-primary btn-block">Oberkörper neu ausrichten (anhand Daumen)</button>-->
+    <!--<button id="resetHeadingUpperArmButton" type="button" class="btn btn-primary btn-block">Oberkörper neu ausrichten (anhand Oberarm)</button>-->
+
+
+    <br>
+
+    <div class="panel panel-default">
+        <div class="panel-heading" data-toggle="collapse" data-target="#panel-calib" style="cursor: pointer">
+            <h3 class="panel-title">Erweitert</h3>
+        </div>
+        <div id="panel-calib" class="panel-collapse collapse"><!-- class "in" to show by default -->
+            <div class="panel-body" id="extendedPanel">
+                <button id="calibRestButton" type="button" data-running-text="Kalibrierung läuft" class="btn btn-primary btn-block">Ruhekalibrierung</button>
+                <button id="calibMagButton1" type="button" data-running-text="Kalibrierung läuft" class="btn btn-primary btn-block">Magnetometer kalibrierieren IMU1</button>
+                <button id="calibMagButton2" type="button" data-running-text="Kalibrierung läuft" class="btn btn-primary btn-block">Magnetometer kalibrierieren IMU2</button>
+                <button id="calibMagButton3" type="button" data-running-text="Kalibrierung läuft" class="btn btn-primary btn-block">Magnetometer kalibrierieren IMU3</button>
+                <button id="quatDebugButton" type="button" data-running-text="Press again after movement" class="btn btn-primary btn-block">Debug Quaternions</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="magDistDialog" class="modal fade" role="dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">Magnetfeld-Test</h4>
+                </div>
+                <div class="modal-body">
+                    <p>Stärke des Magnetfelds:</p>
+                    <!--<p style="text-align: center"><canvas id="magDistPlot0" width="400" height="220"></canvas></p>-->
+                    <div id="magDistPlot0Div"></div>
+                    <p>Inklination des Magnetfelds:</p>
+                    <!--<p style="text-align: center"><canvas id="magDistPlot1" width="400" height="220"></canvas></p>-->
+                    <div id="magDistPlot1Div"></div>
+                    <p>Heading-Störung:</p>
+                    <div id="magDistPlot2Div"></div>
+                    <!--<p style="text-align: center"><canvas id="magDistPlot2" width="400" height="220"></canvas></p>-->
+                    <p style="text-align: center"><span class="badge" style="background-color: #1f77b4">&nbsp;</span> Oberarm-IMU &nbsp;
+                        <span class="badge" style="background-color: #2ca02c">&nbsp;</span> Unterarm-IMU</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Schließen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="lib/3rdparty/base.js"></script>
+<script src="lib/3rdparty/babylon.js"></script>
+<script src="lib/3rdparty/ui.js"></script>
+
+<script src="lib/common.js"></script>
+<script src="lib/datasource.js"></script>
+<script src="lib/babylon.js"></script>
+<script src="lib/quaternion.js"></script>
+<script src="lib/ui.js"></script>
+<script src="lib/ui-extra.js"></script>
+<!--<script src="lib/quadcop.js"></script>-->
+
+<script>
+    "use strict";
+
+    class MainScene extends Scene {
+        constructor(id, signal) {
+            super(id);
+            this.signal = signal;
+            this.createScene();
+            window.addEventListener('resize', function() {
+                this.engine.resize();
+            }.bind(this));
+        }
+
+        createScene() {
+            // this.camera = new BABYLON.ArcRotateCamera("ArcRotateCamera", 1, 0.8, 50, new BABYLON.Vector3(0, 0, 0), this.scene);
+            // this.camera = new BABYLON.ArcRotateCamera("ArcRotateCamera", Math.PI/2, 0.8, 130, new BABYLON.Vector3(10, 0, -30), this.scene);
+
+            // from back:
+            // this.camera = new BABYLON.ArcRotateCamera("ArcRotateCamera", Math.PI/2, 0.8, 130, new BABYLON.Vector3(0, 0, 0), this.scene);
+            // from front/side:
+            this.camera = new BABYLON.ArcRotateCamera("ArcRotateCamera", -0.9, 1.25, 130, new BABYLON.Vector3(0, 0, 0), this.scene);
+            this.camera.attachControl(this.canvas, false);
+            this.light = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
+
+            this.human = new Human(this.scene);
+            // this.imu = new IMUBox(this.scene);
+        }
+
+        onSample(sample) {
+            //this.imu.setQuatWXYZ(sample[this.signal]);
+            this.human.onSample(sample);
+        }
+    }
+
+
+    class CalibrateButton { // note: this should be based on Button from ui.js
+        constructor(selector, blockName, stateSignal) {
+            this.lastState = null;
+            this.blockName = blockName;
+            this.stateSignal = stateSignal;
+
+            this.$button = $(selector);
+            this.$button.on('click', this.onClick.bind(this));
+
+            this.defaultText = this.$button.text();
+            this.runningText = this.$button.data('running-text');
+            this.successText = this.$button.data('success-text') || this.defaultText;
+        }
+
+        onClick() {
+            dataSource.sendMessage([this.blockName, 'start']);
+        }
+
+        onSample(sample) {
+            const state = sample[this.stateSignal];
+            if (this.lastState !== state) {
+                this.setState(state);
+            }
+        }
+
+        setState(state) {
+            if (state === 0.0) { // not calibrated
+                this.$button.removeClass('btn-danger').removeClass('btn-success').removeClass('btn-primary').addClass('btn-danger');
+                this.$button.text(this.defaultText);
+            } else if (state !== 1.0 && state !== -1.0) { // calibration running
+                let lastPercent = Math.floor(this.lastState * 100);
+                const percent = Math.floor(state * 100);
+                if (this.lastState === 0.0 || this.lastState === 1.0 || this.lastState === -1.0) {
+                    lastPercent = -1;
+                    this.$button.removeClass('btn-success').removeClass('btn-primary').removeClass('btn-danger').addClass('btn-warning');
+                }
+                if (lastPercent !== percent) {
+                    this.$button.text(this.runningText + ' (' + percent + '%)');
+                }
+            } else if (state === -1.0) {
+                // FIXME: hack just for main calibrate button
+                this.$button.removeClass('btn-success').removeClass('btn-warning').removeClass('btn-danger').addClass('btn-primary');
+                this.$button.text('Verwende bekannte Ausrichtung');
+            } else { // calibration finished
+                this.$button.removeClass('btn-danger').removeClass('btn-primary').removeClass('btn-warning').addClass('btn-success');
+                this.$button.text(this.successText);
+
+            }
+
+            this.lastState = state;
+        }
+    }
+
+    class Human extends RiggedMesh {
+        constructor(scene) {
+            super(scene);
+
+            BABYLON.SceneLoader.ImportMesh('', 'models/human/', 'human.babylon', scene, this.onLoad.bind(this));
+
+            this.q_EImu2EB_base = this.q_EImu2EB;
+            this.delta_torso = 0.0;
+            this.enabled = true;
+
+            // left and right is swapped due to because model assumes left hand coordinate system
+            this.boneUpperArmRight = 'LeftArm';
+            this.boneForearmRight = 'LeftForeArm';
+            this.q_Bone2Imu = {};
+            this.q_Bone2Imu[this.boneUpperArmRight] = new Quaternion(0,1,0,1);
+            this.q_Bone2Imu[this.boneForearmRight] =  new Quaternion(0,0,0,1);
+        }
+
+        onLoad(newMeshes, particleSystems, skeletons) {
+            let eyes = newMeshes[1];
+            let shirt = newMeshes[0];
+            shirt.material.diffuseColor = new BABYLON.Vector3(0.5, 0.5, 0.5);
+            let hairs = newMeshes[2];
+            this.mesh = newMeshes[3];
+            eyes.parent = this.mesh;
+            shirt.parent = this.mesh;
+            hairs.parent = this.mesh;
+
+            this.mesh.scaling = new BABYLON.Vector3(8, 8, 8);
+            this.skeleton = skeletons[0];
+            this.addBones(this.skeleton, this.mesh);
+            this.mesh.position = new BABYLON.Vector3(0, -110, 0);
+
+            console.log('human loaded');
+            this.initialized = true;
+        }
+
+        onSample(sample) {
+            if (this.delta_torso !== sample.delta_torso) {
+                this.delta_torso = sample.delta_torso;
+                const qHeading = Quaternion.fromAngleAxis(-this.delta_torso, [0, 0, 1]);
+                this.q_EImu2EB = this.q_EImu2EB_base.multiply(qHeading);
+            }
+
+            if (!this.initialized || !this.enabled)
+                return;
+
+            this.setAbsoluteQuat(this.boneUpperArmRight, sample.quat1_isb);
+            this.setAbsoluteQuat(this.boneForearmRight, sample.quat2_isb);
+
+        }
+
+        setEnabled(enabled) {
+            this.enabled = enabled;
+            if (!enabled) {
+                this.setToRestPose([this.boneUpperArmRight, this.boneForearmRight]);
+                // this.setToZeroPose([this.boneUpperArmRight, this.boneForearmRight]);
+            }
+        }
+    }
+
+    class DebugQuatButton {
+        constructor(selector, quatSignals) {
+            this.startQuat = [];
+            this.quatSignals = quatSignals;
+            this.lastSample = {};
+
+            this.$button = $(selector);
+            this.$button.on('click', this.onClick.bind(this));
+
+            this.defaultText = this.$button.text();
+            this.runningText = this.$button.data('running-text');
+        }
+
+        onClick() {
+            if (this.startQuat.length) {
+                const quats = this.getQuats(this.lastSample);
+
+                let text = 'Angle*axis for relative movement:\n';
+                for (let i = 0; i < quats.length; i++) {
+                    const relQuat = this.startQuat[i].conjugate().multiply(quats[i]);
+                    const axis = new BABYLON.Vector3(relQuat.x, relQuat.y, relQuat.z).normalize();
+                    const angle = 180/Math.PI * 2 * Math.acos(relQuat.w);
+                    const angleAxis = axis.scale(angle);
+                    console.log(this.quatSignals[i], Math.round(angleAxis.x), Math.round(angleAxis.y), Math.round(angleAxis.z), '°');
+                    text += this.quatSignals[i] +' -- x: ' + Math.round(angleAxis.x) + ', y: ' + Math.round(angleAxis.y) + ', z: ' + Math.round(angleAxis.z) + ' °\n';
+                }
+                alert(text);
+
+                this.$button.removeClass('btn-danger').removeClass('btn-success').addClass('btn-primary');
+                this.$button.text(this.defaultText);
+                this.startQuat = [];
+            } else {
+                this.startQuat = this.getQuats(this.lastSample);
+
+
+                this.$button.removeClass('btn-success').removeClass('btn-primary').addClass('btn-danger');
+                this.$button.text(this.runningText);
+            }
+        }
+
+        onSample(sample) {
+            this.lastSample = sample;
+        }
+
+        getQuats(sample) {
+            const quats = [];
+            for (let signal of this.quatSignals) {
+                quats.push(new Quaternion(sample[signal]).babylon());
+            }
+            return quats;
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////  CREATE CLASSES                                                                                                ////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    const dataSource = new WebSocketDataSource("ws://localhost:9999/socket", {sendParamsOnReceivedMsg: false});
+
+    const mainScene = new MainScene('renderCanvas');
+    dataSource.addSink(mainScene);
+
+    const debugLayerCheckbox = new DebugLayerCheckbox('#extendedPanel', mainScene);
+
+    let magDistDialogCreated = false;
+    $('#magDistDialog').on('shown.bs.modal', function (e) {
+        if (magDistDialogCreated)
+            return;
+        const magNormPlot = new LinePlot('#magDistPlot0Div', ['mag1_norm', 'mag2_norm'],
+            {width: 400, height: 220, colors: ['#1f77b4', '#2ca02c'], ylim: [0, 2]});
+        dataSource.addSink(magNormPlot);
+        const magInclPlot = new LinePlot('#magDistPlot1Div', ['mag1_incl', 'mag2_incl'],
+            {width: 400, height: 220, colors: ['#1f77b4', '#2ca02c'], ylim: [-90, 90]});
+        dataSource.addSink(magInclPlot);
+        const magHeadingPlot = new LinePlot('#magDistPlot2Div', ['mag1_heading_hp', 'mag2_heading_hp'],
+            {width: 400, height: 220, colors: ['#1f77b4', '#2ca02c'], ylim: [-180, 180]});
+        dataSource.addSink(magHeadingPlot);
+        magDistDialogCreated = true;
+    });
+
+
+    const imu1Scene = new IMUScene('renderCanvasIMU1', {signal: 'quat1', axisSignal: 'j1'});
+    dataSource.addSink(imu1Scene);
+
+    const imu2Scene = new IMUScene('renderCanvasIMU2', {signal: 'quat2', axisSignal: 'j2', texture: 'lib/textures/texture_imu_B.png'});
+    dataSource.addSink(imu2Scene);
+
+    const calibRestButton = new CalibrateButton('#calibRestButton', 'RestCalibBlock', 'calibRestState');
+    dataSource.addSink(calibRestButton);
+
+    const calibMagButton1 = new CalibrateButton('#calibMagButton1', 'MagCalibBlock1', 'calibMagState1');
+    dataSource.addSink(calibMagButton1);
+
+    const calibMagButton2 = new CalibrateButton('#calibMagButton2', 'MagCalibBlock2', 'calibMagState2');
+    dataSource.addSink(calibMagButton2);
+
+    const calibMagButton3 = new CalibrateButton('#calibMagButton3', 'MagCalibBlock3', 'calibMagState3');
+    dataSource.addSink(calibMagButton3);
+
+    const startButton = new CalibrateButton('#startButton', 'OnlineEstimator', 'calibState');
+    dataSource.addSink(startButton);
+
+
+    class CheckBox { // note: extend Checkbox from ui.js instead
+        constructor(selector, signal, block, command) {
+            this.$checkbox = $(selector);
+            this.signal = signal;
+            this.block = block;
+            this.command = command;
+            this.$checkbox.change(this.onCheckBoxChange.bind(this));
+        }
+
+        onCheckBoxChange() {
+            dataSource.sendMessage([this.block, this.command]);
+
+        }
+
+        onSample(sample) {
+            const state = sample[this.signal] !== 0.0;
+            if (this.$checkbox.prop('checked') !== state) {
+                this.$checkbox.prop('checked', state);
+            }
+        }
+    }
+
+    const identifyDistCheckBox = new CheckBox("#identifyDistCheckbox", "identify_delta", "OnlineEstimator", "toggleIdentifyDisturbance");
+    dataSource.addSink(identifyDistCheckBox);
+
+    const disturbanceCheckBox = new CheckBox("#disturbanceCheckbox", "delta_sim", "OriEstIMUBlock", "toggleDisturbance");
+    dataSource.addSink(disturbanceCheckBox);
+
+    const compensateDistCheckBox = new CheckBox("#compensateDistCheckbox", "compensate_delta", "OnlineEstimator", "toggleCompensateDisturbance");
+    dataSource.addSink(compensateDistCheckBox);
+
+    $('#enableAvatarCheckbox').change(function() {
+        mainScene.human.setEnabled($(this).prop('checked'));
+    });
+
+
+    $('#resetHeadingThumbButton').on('click', () => {dataSource.sendMessage(['OnlineEstimator', 'resetTorsoHeadingThumb']);});
+    $('#resetHeadingUpperArmButton').on('click', () => {dataSource.sendMessage(['OnlineEstimator', 'resetTorsoHeadingUpperArm']);});
+    $('#useFixedAlignmentButton').on('click', () => {dataSource.sendMessage(['OnlineEstimator', 'useFixed']);});
+    $('#resetCalibrationButton').on('click', () => {dataSource.sendMessage(['OnlineEstimator', 'reset']);});
+
+    const debugButton = new DebugQuatButton('#quatDebugButton', ['quat1_isb', 'quat2_isb']);
+    dataSource.addSink(debugButton);
+
+    dataSource.sendMessage(['OnlineEstimator', 'reset']);
+
+
+    const deltaPlot = new LinePlot('#deltaPlotDiv', ['delta_sim', 'delta'], {
+        width: 300,
+        height: 150,
+        colors: ['#1f77b4', '#2ca02c'],
+        ylim: [-180, 180],
+        scaleFactor: 180 / Math.PI,
+    });
+    dataSource.addSink(deltaPlot);
+
+
+    document.body.onkeyup = function(e) {
+        if(e.keyCode === 32){ // space
+            startButton.$button.click();
+            e.preventDefault();
+        } else if (e.keyCode === 69) {// e(nable)
+            const val = !$('#enableAvatarCheckbox').prop('checked');
+            $('#enableAvatarCheckbox').prop('checked', val);
+            mainScene.human.setEnabled(val);
+            e.preventDefault();
+        } else if (e.keyCode === 65) { // a(ttachment)
+            $('#useFixedAlignmentButton').click();
+        } else if (e.keyCode === 82) { // r(eset)
+            $('#resetCalibrationButton').click();
+        } else if (e.keyCode === 73) { // i(dentify)
+            identifyDistCheckBox.onCheckBoxChange();
+        } else if (e.keyCode === 83) { // s(imulate)
+            disturbanceCheckBox.onCheckBoxChange();
+        } else if (e.keyCode === 67) { // c(ompensate)
+            compensateDistCheckBox.onCheckBoxChange();
+        }
+    };
+
+</script>
+
+</body>
+</html>
